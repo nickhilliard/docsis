@@ -29,6 +29,7 @@ fi
 
 FILES=*.txt
 DOCSIS=../src/docsis
+DOCSISARGS="-M `pwd`/../mibs:`pwd`/../mibs/ietf:`pwd`/../mibs/iana"
 KEYFILE=key
 
 ALL_TESTS=`ls -l *.txt | wc -l`;
@@ -38,7 +39,7 @@ do
   let i++;
   echo "Progress: $i / $ALL_TESTS";
   TEST=$(echo $f | cut -f1 -d.)
-  $DOCSIS -e $TEST.txt $KEYFILE $TEST.cm.new
+  $DOCSIS $DOCSISARGS -e $TEST.txt $KEYFILE $TEST.cm.new
   if [ ! -f $TEST.cm.new ]; then
     echo "Test $TEST failed to create CM file on first pass.";
     if [ $ALLOW_FAILED = FALSE ]; then
@@ -55,7 +56,7 @@ do
       exit -1;
     fi
   fi
-  $DOCSIS -d $TEST.cm.new > $TEST.conf.new
+  $DOCSIS $DOCSISARGS -d $TEST.cm.new > $TEST.conf.new
   if [ ! -f $TEST.conf.new ]; then
     echo "Test $TEST failed to create a conf file on second pass.";
     if [ $ALLOW_FAILED = FALSE ]; then
@@ -72,7 +73,7 @@ do
       exit -1;
     fi
   fi
-  $DOCSIS -e $TEST.conf.new $KEYFILE $TEST.cm.new
+  $DOCSIS $DOCSISARGS -e $TEST.conf.new $KEYFILE $TEST.cm.new
   if [ ! -f $TEST.cm.new ]; then
     echo "Test $TEST failed to create CM file on third pass.";
     if [ $ALLOW_FAILED = FALSE ]; then
