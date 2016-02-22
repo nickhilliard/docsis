@@ -261,36 +261,38 @@ usage ()
   fprintf(stderr, "Copyright (c) 2002,2003,2004,2005 Evvolve Media SRL, docsis@evvolve.com\n");
   fprintf(stderr, "Copyright (c) 2014 - 2015 Adrian Simionov, daniel.simionov@gmail.com\n\n");
 
-  fprintf(stderr, "To encode a cable modem configuration file: \n\tdocsis -e <modem_cfg_file> <key_file> <output_file>\n");
-  fprintf(stderr, "To encode multiple cable modem configuration files: \n\tdocsis -m <modem_cfg_file1> ...  <key_file> <new_extension>\n");
-  fprintf(stderr, "To encode a MTA configuration file: \n\tdocsis -p <mta_cfg_file> <output_file>\n");
-  fprintf(stderr, "To encode multiple MTA configuration files: \n\tdocsis -m -p <mta_file1> ...  <new_extension>\n");
-  fprintf(stderr, "To decode a CM or MTA config file: \n\tdocsis -d <binary_file>\n");
-  fprintf(stderr, "To decode a CM or MTA config file with OIDs: \n\tdocsis -o -d <binary_file>\n");
-  fprintf(stderr, "\nTo specify the MIBPATH encode or decode use:\n"
-		  "\tdocsis -M \"PATH1:PATH2\" -d <binary_file>\n"
-		  "\tdocsis -M \"PATH1:PATH2\" -e <modem_cfg_file> <key_file> <output_file>\n"
-		  "\tdocsis -M \"PATH1:PATH2\" -m <modem_cfg_file1> ...  <key_file> <new_extension>\n"
-		  "\tdocsis -M \"PATH1:PATH2\" -p <mta_cfg_file> <output_file>\n"
-		  "\tdocsis -M \"PATH1:PATH2\" -m -p <mta_file1> ...  <new_extension>\n");
-  fprintf(stderr, "\nTo add SHA1 hash to mta config file, use -na or -eu options:\n");
-  fprintf(stderr, "\tdocsis -na|-eu -p <mta_cfg_file> <output_file>\n");
-  fprintf(stderr, "\tdocsis -na|-eu -m -p <mta_file1> ...  <new_extension>\n");
-  fprintf(stderr, "\nTo add PC20 dialplan from external dialplan.txt file, use -dialplan option:\n");
-  fprintf(stderr, "\tdocsis -p -dialplan <mta_cfg_file> <output_file>\n");
-  fprintf(stderr, "\tdocsis -na|-eu -p -dialplan <mta_cfg_file> <output_file>\n");
-  fprintf(stderr, "\nTo remove hash from MTA config file, use -nohash option:\n");
-  fprintf(stderr, "\tdocsis -nohash -d <mta_cfg_file>\n");
-  fprintf(stderr, "\tdocsis -nohash -o -d <mta_cfg_file>\n");
-  fprintf(stderr, "\nWhere:\n<cfg_file>\t\t= name of text (human readable) cable modem or MTA \n"
+  fprintf(stderr, "To encode a cable modem configuration file: \n\tdocsis [modifiers] -e <modem_cfg_file> <key_file> <output_file>\n");
+  fprintf(stderr, "To encode multiple cable modem configuration files: \n\tdocsis [modifiers] -m <modem_cfg_file1> ... <key_file> <new_extension>\n");
+  fprintf(stderr, "To encode a MTA configuration file: \n\tdocsis [modifiers] -p <mta_cfg_file> <output_file>\n");
+  fprintf(stderr, "To encode multiple MTA configuration files: \n\tdocsis [modifiers] -m -p <mta_file1> ... <new_extension>\n");
+  fprintf(stderr, "To decode a CM or MTA config file: \n\tdocsis [modifiers] -d <binary_file>\n\n");
+
+  fprintf(stderr, "Where:\n<cfg_file>\t\t= name of text (human readable) cable modem or MTA \n"
 		  "\t\t\t  configuration file;\n"
 		  "<key_file>\t\t= text file containing the authentication key\n"
 		  "\t\t\t  (shared secret) to be used for the CMTS MIC;\n"
 		  "<output_file> \t\t= name of output file where"
 		  " the binary data will\n\t\t\t  be written to (if it does not exist it is created);\n"
 		  "<binary_file>\t\t= name of binary file to be decoded;\n"
-		  "<new_extension>\t\t= new extension to be used when encoding multiple files.\n");
-  fprintf(stderr, "\nSee examples/*.cfg for configuration file format.\n");
+		  "<new_extension>\t\t= new extension to be used when encoding multiple files.\n\n");
+
+  fprintf(stderr, "The following command-line modifiers are available:\n"
+	"	-o\n"
+	"		Decode OIDs numerically.\n\n"
+	"	-M \"PATH1:PATH2\"\n"
+	"		Specify the SNMP MIB directory when encoding or decoding configuration\n"
+	"		files.\n\n"
+	"	-na | -eu\n"
+	"		Adds CableLabs PacketCable or Excentis EuroPacketCable SHA1 hash\n"
+	"		when encoding an MTA config file.\n\n"
+	"	-dialplan\n"
+	"		Adds a PC20 dialplan from an external file called \"dialplan.txt\" in\n"
+	"		the current directory.\n\n"
+	"	-nohash\n"
+	"		Removes the PacketCable SHA1 hash from the MTA config file when\n"
+	"		decoding.\n"
+	);
+  fprintf(stderr, "\nSee examples/*.cfg for sample configuration files.\n");
   fprintf(stderr, "\nPlease report bugs or feature requests on GitHub.");
   fprintf(stderr, "\nProject repository is https://github.com/rlaager/docsis\n\n");
   exit (-10);
@@ -306,187 +308,133 @@ main (int argc, char *argv[])
   unsigned int encode_docsis = FALSE, decode_bin = FALSE, hash = 0;
   int i;
   int resolve_oids = 1;
-  if (argc < 2 ) {
-	usage();
-  }
 
-  /* option: -nohash -o -d */
-  if (!strcmp (argv[1], "-nohash") ){
-    if (argc < 5) {
+  while (argc > 0) {
+    argc--; argv++;
+
+    if (!argc) {
       usage();
     }
-    nohash = 1;
-    if (!strcmp (argv[2], "-o") ){
+
+    /* the initial command-line parameters are flags / modifiers */
+    if (!strcmp (argv[0], "-nohash")) {
+      nohash = 1;
+
+      continue;
+    }
+
+    if (!strcmp (argv[0], "-o")) {
       resolve_oids = 0;
+
       if (!netsnmp_ds_get_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_OID_OUTPUT_NUMERIC)) {
         netsnmp_ds_toggle_boolean (NETSNMP_DS_LIBRARY_ID, NETSNMP_OID_OUTPUT_NUMERIC);
       }
-      if (!strcmp (argv[3], "-d")) {
-        decode_bin = TRUE;
-        config_file = argv[4];
-      } else {
+
+      continue;
+    }
+
+    if (!strcmp (argv[0], "-M")) {
+      if (argc < 2 ) {
         usage();
       }
-    } else if (!strcmp (argv[2], "-d")) {
+
+      custom_mibs=argv[1];
+
+      argc--; argv++;
+      continue;
+    }
+
+    if (!strcmp (argv[0], "-na")) {
+      if (hash) {
+        usage();
+      }
+      hash = 1;
+      continue;
+    }
+
+    if (!strcmp (argv[0], "-eu")) {
+      if (hash) {
+        usage();
+      }
+      hash = 2;
+      continue;
+    }
+
+    if (!strcmp (argv[0], "-dialplan")) {
+      dialplan = 1;
+      continue;
+    }
+
+    /* the following command-line parameters are actions */
+
+    if (!strcmp (argv[0], "-d")) {
+      if (argc < 2 ) {
+        usage();
+      }
+
       decode_bin = TRUE;
-      config_file = argv[3];
-    } else {
-      usage();
+      config_file = argv[1];
+
+      break;
     }
-  /* option -o -d */
-  } else if (!strcmp (argv[1], "-o") ) {
-    if (argc < 4 ) {
-      usage();
+
+    if (!strcmp (argv[0], "-e")) {
+      if (argc < 4 ) {
+        usage();
+      }
+
+      encode_docsis = TRUE;
+      config_file = argv[1];
+      key_file = argv[2];
+      output_file = argv[3];
+
+      break;
     }
-    resolve_oids = 0;
-    if (!netsnmp_ds_get_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_OID_OUTPUT_NUMERIC)) {
-      netsnmp_ds_toggle_boolean (NETSNMP_DS_LIBRARY_ID, NETSNMP_OID_OUTPUT_NUMERIC);
-    }
-    if (!strcmp (argv[2], "-d")) {
-      decode_bin = TRUE;
-      config_file = argv[3];
-    } else {
-      usage();
-    }
-  /* option -m -p */
-  } else if (!strcmp (argv[1], "-m") ) {
-    if (argc < 5 ) {
-      usage();
-    }
-    extension_string = argv[argc-1];
-    if (!strcmp ( argv[2], "-p")) {
-      key_file = NULL;
-    } else {
+
+    if (!strcmp (argv[0], "-m")) {
+      extension_string = argv[argc-1];
       key_file = argv[argc-2];
       encode_docsis = TRUE;
+
+      continue;
     }
-  /* option -na -m -p*/
-  } else if (!strcmp (argv[1], "-na")) {
-    hash = 1;
-    if (!strcmp (argv[2], "-m") ) {
-      if (argc < 6) {
+
+    if (!strcmp (argv[0], "-p")) {
+      /* encode_docsis may already have been set via the "-m" option */
+      encode_docsis = 0;
+
+      argc--; argv++;
+
+      if (argc < 2 ) {
         usage();
       }
-      extension_string = argv[argc-1];
-      if (!strcmp ( argv[3], "-p")) {
-        key_file = NULL;
-      } else {
-        key_file = argv[argc-2];
-        encode_docsis = TRUE;
-      }
-    /* option -na -p */
-    } else if (!strcmp ( argv[2], "-p" )) {
-      if (argc < 5) {
-        usage ();
-      }
-      config_file = argv[3];
-      output_file = argv[4];
-      if (!strcmp ( argv[3], "-dialplan")) {
+
+      /* -p might be followed by -dialplan.  This is allowed for backwards
+       * compatibility */
+      if (!strcmp (argv[0], "-dialplan")) {
         dialplan = 1;
-        config_file = argv[4];
-        output_file = argv[5];
+        argc--; argv++;
       }
-    }
-  /* option -eu -m -p*/
-  } else if (!strcmp (argv[1], "-eu")) {
-    hash = 2;
-    if (!strcmp (argv[2], "-m") ) {
-      if (argc < 6) {
+
+      if (argc < 2 ) {
         usage();
       }
-      extension_string = argv[argc-1];
-      if (!strcmp ( argv[3], "-p")) {
-        key_file = NULL;
-      } else {
-        key_file = argv[argc-2];
-        encode_docsis = TRUE;
+
+      /* if -m has not already been specified, then we expect "<mta_cfg_file> <output_file>" */
+      if (extension_string == NULL) {
+        config_file = argv[0];
+        output_file = argv[1];
       }
-    /* option -eu -p */
-    } else if (!strcmp ( argv[2], "-p" )) {
-      if (argc < 5) {
-        usage ();
-      }
-      config_file = argv[3];
-      output_file = argv[4];
-      if (!strcmp ( argv[3], "-dialplan")) {
-        dialplan = 1;
-        config_file = argv[4];
-        output_file = argv[5];
-      }
+
+      break;
     }
-  /* option -M */
-  } else if (!strcmp (argv[1], "-M") ) {
-    if (argc < 4 ) {
-      usage();
+
+    /* no more recognisable options means that we've either finished parsing
+     * all arguments or else that the remaining arguments refer to a list of
+     * config files */
+    if (argc) {
+      break;
     }
-    custom_mibs=argv[2];
-    /* option -M -d */
-    if (!strcmp (argv[3], "-d")) {
-      decode_bin = TRUE;
-      config_file = argv[4];
-    /* option -M -m */
-    } else if (!strcmp (argv[3], "-m")) {
-      if (argc < 5 ) {
-        usage();
-      }
-      extension_string = argv[argc-1];
-      /* option -M -m -p */
-      if (!strcmp ( argv[4], "-p")) {
-        key_file = NULL;
-      } else {
-        key_file = argv[argc-2];
-        encode_docsis = TRUE;
-      }
-    /* option -M -p */
-    } else if (!strcmp (argv[3], "-p")) {
-      if (argc < 6) {
-        usage();
-      }
-      config_file = argv[4];
-      output_file = argv[5];
-    /* option -M -e */
-    } else if (!strcmp (argv[3], "-e")) {
-      encode_docsis = TRUE;
-      config_file = argv[4];
-      key_file = argv[5];
-      output_file = argv[6];
-    } else {
-      usage();
-    }
-  /* option -p */
-  } else if (!strcmp (argv[1], "-p") ) {
-    if (argc < 4) {
-      usage();
-    }
-    config_file = argv[2];
-    output_file = argv[3];
-    if (!strcmp (argv[2], "-dialplan")) {
-      if (argc < 5) {
-        usage();
-      } else {
-        dialplan = 1;
-        config_file = argv[3];
-        output_file = argv[4];
-      }
-    }
-  /* option -d */
-  } else if (!strcmp (argv[1], "-d") ) {
-    if (argc < 3 ) {
-      usage();
-    }
-    decode_bin = TRUE;
-    config_file = argv[2];
-  /* option -e */
-  } else if (!strcmp (argv[1], "-e") ) {
-    if (argc < 5 ) {
-      usage();
-    }
-    encode_docsis = TRUE;
-    config_file = argv[2];
-    key_file = argv[3];
-    output_file = argv[4];
-  } else {
-    usage ();
   }
 
   if (encode_docsis)
@@ -515,8 +463,8 @@ main (int argc, char *argv[])
 
   if (extension_string) { /* encoding multiple files */
 	if (encode_docsis) {
-		/* encode argv[argc-3] to argv[2] */
-		for (i=2; i<argc-2; i++)  {
+		/* encode argv[argc-3] to argv[0] */
+		for (i=0; i<argc-2; i++) {
 			if ( (output_file = get_output_name (argv[i], extension_string)) == NULL ) {
 				fprintf(stderr, "Cannot process input file %s, extension too short ?\n",argv[i] );
 				continue;
@@ -530,8 +478,8 @@ main (int argc, char *argv[])
 			output_file = NULL;
 		}
 	} else {
-		/* encode argv[argc-2] to argv[3] */
-		for (i=3; i<argc-1; i++)  {
+		/* encode argv[argc-2] to argv[0] */
+		for (i=0; i<argc-1; i++) {
 			if ( (output_file = get_output_name (argv[i], extension_string)) == NULL ) {
 				fprintf(stderr, "Cannot process input file %s, extension too short ?\n",argv[i] );
 				continue;
